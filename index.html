@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>像素小农场 - Pixel Haven Farm</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts for retro pixel look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    body {
+      font-family: 'ZCOOL KuaiLe', 'VT323', cursive, sans-serif;
+      image-rendering: pixelated;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .pixel-box {
+      box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.45), inset 2px 2px 0px 0px rgba(255, 255, 255, 0.35);
+    }
+    .pixel-btn {
+      transition: all 0.08s ease;
+      box-shadow: 0 4px 0 #1e293b;
+    }
+    .pixel-btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #1e293b;
+    }
+    .crop-shake {
+      animation: shake 0.6s ease-in-out infinite alternate;
+    }
+    @keyframes shake {
+      0% { transform: rotate(-3deg) scale(1.05); }
+      100% { transform: rotate(3deg) scale(1.1); }
+    }
+    /* Floating coin/text animation */
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-40px); }
+    }
+    .floating-text {
+      position: absolute;
+      pointer-events: none;
+      font-weight: bold;
+      animation: floatUp 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      z-index: 50;
+    }
+    /* Weather overlay */
+    .rain-overlay {
+      background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(147, 197, 253, 0.3) 100%);
+      pointer-events: none;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #78350f;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-amber-100 text-stone-800 min-h-screen flex flex-col justify-between selection:bg-amber-300">
+
+  <!-- Top Navigation & Stats Bar -->
+  <header class="bg-amber-800 border-b-4 border-amber-950 text-amber-100 p-2 sm:p-3 sticky top-0 z-40 shadow-lg">
+    <div class="max-w-4xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center space-x-2">
+        <span class="text-2xl sm:text-3xl">🌾</span>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-wider text-amber-200">像素小农场</h1>
+          <div class="text-xs text-amber-300 flex items-center gap-2">
+            <span id="day-counter">第 1 天</span>
+            <span id="weather-badge" class="px-1.5 py-0.5 rounded bg-amber-900/60 border border-amber-600/50 flex items-center gap-1">
+              <span>☀️</span> 晴朗
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resources -->
+      <div class="flex items-center gap-2 sm:gap-4 text-sm sm:text-base">
+        <!-- Coins -->
+        <div class="flex items-center gap-1 bg-amber-950/70 px-3 py-1.5 rounded-lg border-2 border-amber-600 shadow-inner">
+          <span class="text-yellow-400 text-lg">🪙</span>
+          <span id="coin-display" class="font-bold text-yellow-300 text-lg tracking-wide">60</span>
+        </div>
+        <!-- Level / XP -->
+        <div class="flex items-center gap-1.5 bg-amber-950/70 px-3 py-1.5 rounded-lg border-2 border-amber-600">
+          <span class="text-emerald-400 font-bold" id="level-display">Lv.1</span>
+          <div class="w-16 sm:w-20 bg-amber-900 h-2.5 rounded-full overflow-hidden border border-amber-700">
+            <div id="xp-bar" class="bg-emerald-400 h-full transition-all duration-300" style="width: 10%;"></div>
+          </div>
+        </div>
+        <!-- Sound toggle -->
+        <button id="btn-sound" class="bg-amber-700 hover:bg-amber-600 text-amber-100 p-1.5 rounded-lg border border-amber-500 pixel-btn">
+          <i class="ph ph-speaker-high text-lg"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Game Field -->
+  <main class="flex-1 max-w-4xl mx-auto w-full p-2 sm:p-4 flex flex-col gap-4 relative">
+    
+    <!-- Weather & Atmosphere Overlay -->
+    <div id="weather-effect" class="fixed inset-0 pointer-events-none z-10 transition-colors duration-1000"></div>
+
+    <!-- Banner / Event Notice -->
+    <div id="event-banner" class="bg-amber-200/90 border-2 border-amber-500 rounded-xl p-2 px-4 flex items-center justify-between text-amber-900 text-xs sm:text-sm shadow-sm">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">💡</span>
+        <span id="hint-text">点击土地可以开垦、播种、浇水并收获作物！</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="btn-sleep" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-md text-xs pixel-btn flex items-center gap-1">
+          <span>🌙</span> 跳过夜晚
+        </button>
+      </div>
+    </div>
+
+    <!-- Farm Grid Area -->
+    <div class="bg-gradient-to-b from-emerald-600 to-green-700 p-3 sm:p-6 rounded-2xl border-4 border-amber-900 shadow-2xl relative overflow-hidden">
+      <!-- Farm decorative fences / ambient -->
+      <div class="absolute top-2 left-2 text-xs opacity-60 text-emerald-200 flex items-center gap-1">
+        <span>🏡 农田规划区</span>
+      </div>
+      <div class="absolute top-2 right-2 text-xs opacity-75 text-emerald-200">
+        <span id="land-count-info">已解锁 6/12 块田</span>
+      </div>
+
+      <!-- Soil Grid Container -->
+      <div id="farm-grid" class="grid grid-cols-3 sm:grid-cols-4 gap-2.5 sm:gap-4 mt-6">
+        <!-- Farm tiles dynamically injected here -->
+      </div>
+    </div>
+
+    <!-- Active Toolbelt Selector -->
+    <div class="bg-amber-900/90 backdrop-blur border-3 border-amber-950 p-3 rounded-2xl shadow-xl flex flex-col gap-2">
+      <div class="text-xs text-amber-200 font-bold flex justify-between items-center px-1">
+        <span>当前工具模式</span>
+        <span class="text-amber-300 text-[11px]" id="current-tool-desc">轻触农田执行选中的操作</span>
+      </div>
+      
+      <div class="grid grid-cols-4 gap-2 text-xs sm:text-sm">
+        <button data-tool="till" class="tool-btn active-tool bg-amber-700 text-amber-100 p-2 sm:p-3 rounded-xl border-2 border-amber-500 flex flex-col items-center gap-1 pixel-btn hover:bg-amber-600">
+          <span class="text-xl sm:text-2xl">⛏️</span>
+          <span>开垦翻地</span>
+        </button>
+
+        <button data-tool="plant" class="tool-btn bg-stone-800 text-amber-200 p-2 sm:p-3 rounded-xl border-2 border-stone-600 flex flex-col items-center gap-1 pixel-btn hover:bg-stone-700">
+          <span class="text-xl sm:text-2xl">🌱</span>
+          <span id="current-seed-name">播种小麦</span>
+        </button>
+
+        <button data-tool="water" class="tool-btn bg-stone-800 text-amber-200 p-2 sm:p-3 rounded-xl border-2 border-stone-600 flex flex-col items-center gap-1 pixel-btn hover:bg-stone-700">
+          <span class="text-xl sm:text-2xl">💧</span>
+          <span>浇水</span>
+        </button>
+
+        <button data-tool="harvest" class="tool-btn bg-stone-800 text-amber-200 p-2 sm:p-3 rounded-xl border-2 border-stone-600 flex flex-col items-center gap-1 pixel-btn hover:bg-stone-700">
+          <span class="text-xl sm:text-2xl">🧺</span>
+          <span>收获</span>
+        </button>
+      </div>
+
+      <!-- Quick Seed Picker Bar -->
+      <div class="mt-1 bg-amber-950/60 p-2 rounded-xl flex items-center gap-2 overflow-x-auto" id="seed-selector-bar">
+        <span class="text-xs text-amber-300 whitespace-nowrap pl-1">种子库:</span>
+        <!-- Populated via JS -->
+      </div>
+    </div>
+
+    <!-- Management Center: Shop, Warehouse & Upgrades Tabs -->
+    <div class="bg-amber-200/90 border-4 border-amber-800 rounded-2xl p-3 sm:p-4 shadow-xl">
+      <div class="flex border-b-2 border-amber-400 pb-2 gap-2 text-sm sm:text-base">
+        <button id="tab-btn-shop" class="tab-btn font-bold px-3 py-1 rounded-t-lg bg-amber-600 text-amber-50">
+          🛒 种子商店
+        </button>
+        <button id="tab-btn-storage" class="tab-btn font-bold px-3 py-1 rounded-t-lg bg-amber-300/80 text-amber-900 hover:bg-amber-400/80">
+          📦 仓库 (<span id="storage-count">0</span>)
+        </button>
+        <button id="tab-btn-upgrade" class="tab-btn font-bold px-3 py-1 rounded-t-lg bg-amber-300/80 text-amber-900 hover:bg-amber-400/80">
+          ⭐ 农场升级
+        </button>
+      </div>
+
+      <!-- Tab 1: Shop -->
+      <div id="tab-shop" class="tab-content pt-3">
+        <p class="text-xs text-amber-800 mb-2">购买优质种子，不同植物生长时间和利润各异：</p>
+        <div id="shop-items-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+          <!-- Dynamically generated seeds shop items -->
+        </div>
+      </div>
+
+      <!-- Tab 2: Storage (Selling crops) -->
+      <div id="tab-storage" class="tab-content hidden pt-3">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-xs text-amber-800">收获的农作物保存在这里，可以随时出售获利：</span>
+          <button id="btn-sell-all" class="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-lg border-2 border-amber-800 pixel-btn">
+            💰 一键出售全部
+          </button>
+        </div>
+        <div id="storage-items-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          <!-- Dynamically populated storage -->
+        </div>
+      </div>
+
+      <!-- Tab 3: Upgrades -->
+      <div id="tab-upgrade" class="tab-content hidden pt-3">
+        <p class="text-xs text-amber-800 mb-3">升级设施可以提升耕作效率，自动化部分农活！</p>
+        <div id="upgrade-items-container" class="space-y-2">
+          <!-- Upgrades rendered here -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Simple Toast / Notification Banner -->
+  <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-stone-900/90 text-amber-200 px-4 py-2 rounded-xl border border-amber-400 text-sm shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300 z-50">
+    通知消息
+  </div>
+
+  <footer class="text-center text-xs text-amber-800/80 py-2">
+    像素小农场 · 悠闲播种与丰收时刻 🌱
+  </footer>
+
+  <!-- Web Audio Synthesizer & Game Logic -->
+  <script>
+    /* =========================================================
+       1. SOUND EFFECTS (Web Audio API Synthesizer - Zero External Files)
+       ========================================================= */
+    class RetroAudio {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      toggleMute() {
+        this.muted = !this.muted;
+        return this.muted;
+      }
+      playTone(freq, type = 'sine', duration = 0.1, gainVal = 0.15) {
+        if (this.muted) return;
+        this.init();
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {
+          // Ignore audio errors on autoplay policies
+        }
+      }
+      // Sfx presets
+      sfxTill() {
+        this.playTone(180, 'triangle', 0.12, 0.2);
+      }
+      sfxWater() {
+        this.playTone(480, 'sine', 0.08, 0.18);
+        setTimeout(() => this.playTone(620, 'sine', 0.1, 0.14), 60);
+      }
+      sfxPlant() {
+        this.playTone(320, 'square', 0.08, 0.08);
+      }
+      sfxHarvest() {
+        this.playTone(523.25, 'triangle', 0.1, 0.2); // C5
+        setTimeout(() => this.playTone(659.25, 'triangle', 0.1, 0.2), 90); // E5
+        setTimeout(() => this.playTone(783.99, 'triangle', 0.2, 0.25), 180); // G5
+      }
+      sfxCoin() {
+        this.playTone(987.77, 'sine', 0.08, 0.2);
+        setTimeout(() => this.playTone(1318.51, 'sine', 0.15, 0.2), 80);
+      }
+      sfxLevelUp() {
+        const notes = [440, 554, 659, 880];
+        notes.forEach((freq, idx) => {
+          setTimeout(() => this.playTone(freq, 'triangle', 0.15, 0.2), idx * 100);
+        });
+      }
+      sfxError() {
+        this.playTone(150, 'sawtooth', 0.18, 0.2);
+      }
+    }
+
+    const sound = new RetroAudio();
+
+    /* =========================================================
+       2. CROPS & ITEMS CONFIGURATION
+       ========================================================= */
+    const CROPS = {
+      wheat: {
+        id: 'wheat',
+        name: '小麦',
+        seedCost: 5,
+        sellPrice: 10,
+        growTime: 6, // in seconds
+        minLevel: 1,
+        color: '#eab308',
+        stages: ['🌱', '🌿', '🌾'],
+        icon: '🌾',
+        desc: '基础农作物，生长迅速，非常适合新手种植。'
+      },
+      carrot: {
+        id: 'carrot',
+        name: '胡萝卜',
+        seedCost: 12,
+        sellPrice: 26,
+        growTime: 12,
+        minLevel: 1,
+        color: '#f97316',
+        stages: ['🌱', '🌿', '🥕'],
+        icon: '🥕',
+        desc: '小动物的最爱，口感清脆甘甜。'
+      },
+      tomato: {
+        id: 'tomato',
+        name: '番茄',
+        seedCost: 25,
+        sellPrice: 58,
+        growTime: 20,
+        minLevel: 2,
+        color: '#ef4444',
+        stages: ['🌱', '🌿', '🍅'],
+        icon: '🍅',
+        desc: '红彤彤的多汁番茄，餐厅的大宗收购作物。'
+      },
+      strawberry: {
+        id: 'strawberry',
+        name: '草莓',
+        seedCost: 45,
+        sellPrice: 110,
+        growTime: 32,
+        minLevel: 3,
+        color: '#ec4899',
+        stages: ['🌱', '🌸', '🍓'],
+        icon: '🍓',
+        desc: '香甜诱人，甜品店高价收购的水果。'
+      },
+      pumpkin: {
+        id: 'pumpkin',
+        name: '南瓜',
+        seedCost: 80,
+        sellPrice: 210,
+        growTime: 45,
+        minLevel: 4,
+        color: '#d97706',
+        stages: ['🌱', '🌿', '🎃'],
+        icon: '🎃',
+        desc: '金秋大南瓜，沉甸甸的丰收象征！'
+      },
+      golden_melon: {
+        id: 'golden_melon',
+        name: '金蜜瓜',
+        seedCost: 160,
+        sellPrice: 480,
+        growTime: 65,
+        minLevel: 5,
+        color: '#f59e0b',
+        stages: ['🌱', '✨', '🍈'],
+        icon: '🍈',
+        desc: '农场主的终极秘宝，闪烁着黄金般诱人光泽。'
+      }
+    };
+
+    /* Upgrades Config */
+    const UPGRADE_DATA = [
+      {
+        id: 'unlock_plot',
+        name: '扩建农田',
+        desc: '开拓 2 块新的可耕作土地。',
+        basePrice: 50,
+        priceMultiplier: 2.2,
+        maxLevel: 6, // 6 base + 6*2 = 18 plots
+        icon: '🏞️'
+      },
+      {
+        id: 'water_can',
+        name: '改良洒水壶',
+        desc: '提升土壤保水时间，浇一次水持续时间延长 50%。',
+        basePrice: 80,
+        priceMultiplier: 2.5,
+        maxLevel: 3,
+        icon: '🚿'
+      },
+      {
+        id: 'fertilizer',
+        name: '营养有机肥',
+        desc: '使所有植物生长速度提升 15%。',
+        basePrice: 120,
+        priceMultiplier: 2.0,
+        maxLevel: 4,
+        icon: '🧪'
+      },
+      {
+        id: 'auto_helper',
+        name: '雇佣稻草人精灵',
+        desc: '神秘精灵会自动帮你浇灌干枯的田地。',
+        basePrice: 200,
+        priceMultiplier: 3.0,
+        maxLevel: 2,
+        icon: '🧚'
+      }
+    ];
+
+    /* =========================================================
+       3. GAME STATE
+       ========================================================= */
+    const State = {
+      coins: 80,
+      xp: 0,
+      level: 1,
+      day: 1,
+      weather: 'sunny', // 'sunny' | 'rain'
+      timeOfDay: 0, // 0 to 100 for day-night loop
+      currentTool: 'till', // 'till', 'plant', 'water', 'harvest'
+      selectedSeed: 'wheat',
+      
+      // Inventory
+      seeds: {
+        wheat: 4,
+        carrot: 2,
+        tomato: 0,
+        strawberry: 0,
+        pumpkin: 0,
+        golden_melon: 0
+      },
+      storage: {
+        wheat: 0,
+        carrot: 0,
+        tomato: 0,
+        strawberry: 0,
+        pumpkin: 0,
+        golden_melon: 0
+      },
+
+      // Upgrades levels
+      upgrades: {
+        unlock_plot: 0,
+        water_can: 0,
+        fertilizer: 0,
+        auto_helper: 0
+      },
+
+      // Plots state
+      // status: 'wild' | 'tilled' | 'growing' | 'ripe'
+      // moisture: 0 to 100
+      // progress: 0 to 100
+      // crop: cropId
+      plots: []
+    };
+
+    // Initialize initial plots
+    function initPlots() {
+      const initialCount = 6;
+      State.plots = [];
+      for (let i = 0; i < 18; i++) {
+        State.plots.push({
+          id: i,
+          unlocked: i < initialCount,
+          status: 'wild', // 'wild', 'tilled', 'planted'
+          moisture: 0,
+          crop: null,
+          progress: 0, // in seconds grown
+          ripe: false
+        });
+      }
+    }
+
+    /* =========================================================
+       4. UI HELPERS & RENDERING
+       ========================================================= */
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.style.opacity = '1';
+      clearTimeout(t.timer);
+      t.timer = setTimeout(() => {
+        t.style.opacity = '0';
+      }, 2000);
+    }
+
+    function createFloatingText(elem, text, color = '#fbbf24') {
+      const rect = elem.getBoundingClientRect();
+      const floater = document.createElement('div');
+      floater.className = 'floating-text text-sm sm:text-base';
+      floater.style.color = color;
+      floater.innerText = text;
+      floater.style.left = `${rect.left + rect.width / 2 - 15}px`;
+      floater.style.top = `${rect.top + window.scrollY}px`;
+      document.body.appendChild(floater);
+      setTimeout(() => floater.remove(), 900);
+    }
+
+    function getXpNeeded(lvl) {
+      return lvl * 60;
+    }
+
+    function addXP(amount) {
+      State.xp += amount;
+      const needed = getXpNeeded(State.level);
+      if (State.xp >= needed) {
+        State.xp -= needed;
+        State.level++;
+        sound.sfxLevelUp();
+        showToast(`🎉 恭喜升级到 Lv.${State.level}！解锁了新种子与能力！`);
+        renderShop();
+      }
+      renderHeaderStats();
+    }
+
+    function addCoins(amount) {
+      State.coins += amount;
+      renderHeaderStats();
+    }
+
+    function getSpeedMultiplier() {
+      // Each fertilizer upgrade adds +15% speed
+      return 1 + (State.upgrades.fertilizer * 0.15);
+    }
+
+    function getMoistureDecayRate() {
+      // Improved watering can makes moisture last longer
+      return 1 / (1 + State.upgrades.water_can * 0.5);
+    }
+
+    /* =========================================================
+       5. CORE RENDERING FUNCTIONS
+       ========================================================= */
+    function renderHeaderStats() {
+      document.getElementById('coin-display').innerText = State.coins;
+      document.getElementById('level-display').innerText = `Lv.${State.level}`;
+      const needed = getXpNeeded(State.level);
+      const pct = Math.min(100, Math.floor((State.xp / needed) * 100));
+      document.getElementById('xp-bar').style.width = `${pct}%`;
+
+      document.getElementById('day-counter').innerText = `第 ${State.day} 天`;
+
+      const weatherBadge = document.getElementById('weather-badge');
+      if (State.weather === 'rain') {
+        weatherBadge.innerHTML = '<span>🌧️</span> 滋润细雨';
+        weatherBadge.className = 'px-1.5 py-0.5 rounded bg-blue-900/80 border border-blue-500 text-blue-200 flex items-center gap-1';
+      } else {
+        weatherBadge.innerHTML = '<span>☀️</span> 艳阳高照';
+        weatherBadge.className = 'px-1.5 py-0.5 rounded bg-amber-900/60 border border-amber-600/50 text-amber-200 flex items-center gap-1';
+      }
+
+      // Storage badge count
+      let totalStorage = 0;
+      for (const k in State.storage) {
+        totalStorage += State.storage[k];
+      }
+      document.getElementById('storage-count').innerText = totalStorage;
+
+      // Unlocked land count
+      const unlockedCount = State.plots.filter(p => p.unlocked).length;
+      document.getElementById('land-count-info').innerText = `已解锁 ${unlockedCount}/18 块田`;
+    }
+
+    function renderSeedBar() {
+      const bar = document.getElementById('seed-selector-bar');
+      bar.innerHTML = '';
+      
+      Object.keys(CROPS).forEach(cropKey => {
+        const crop = CROPS[cropKey];
+        const count = State.seeds[cropKey] || 0;
+        const isLocked = State.level < crop.minLevel;
+        const isSelected = State.selectedSeed === cropKey;
+
+        const btn = document.createElement('button');
+        btn.className = `flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border-2 transition-all shrink-0 ${
+          isSelected 
+            ? 'bg-amber-400 text-amber-950 border-amber-200 shadow-md scale-105' 
+            : 'bg-amber-900/80 text-amber-100 border-amber-700 hover:bg-amber-800'
+        } ${isLocked ? 'opacity-40 grayscale pointer-events-none' : ''}`;
+
+        btn.innerHTML = `
+          <span>${crop.icon}</span>
+          <span>${crop.name}</span>
+          <span class="bg-amber-950/70 text-amber-300 px-1 rounded text-[10px]">${count}</span>
+        `;
+
+        btn.addEventListener('click', () => {
+          State.selectedSeed = cropKey;
+          setTool('plant');
+          renderSeedBar();
+        });
+
+        bar.appendChild(btn);
+      });
+    }
+
+    function renderFarmGrid() {
+      const container = document.getElementById('farm-grid');
+      container.innerHTML = '';
+
+      State.plots.forEach((plot) => {
+        if (!plot.unlocked) return;
+
+        const tile = document.createElement('div');
+        tile.className = 'relative aspect-square rounded-xl p-2 flex flex-col items-center justify-between cursor-pointer pixel-btn select-none overflow-hidden transition-all duration-150';
+
+        // Soil background styling based on status & moisture
+        if (plot.status === 'wild') {
+          tile.classList.add('bg-stone-500', 'border-4', 'border-stone-700', 'hover:brightness-110');
+          tile.innerHTML = `
+            <div class="text-[10px] text-stone-300 self-start">荒草地</div>
+            <div class="text-3xl my-auto opacity-75">🌿</div>
+            <div class="text-[10px] text-amber-200 bg-stone-800/80 px-1 rounded">需开垦</div>
+          `;
+        } else {
+          // Tilled or planted
+          const isWet = plot.moisture > 0;
+          if (isWet) {
+            tile.classList.add('bg-amber-900', 'border-4', 'border-amber-950'); // Moist dark brown
+          } else {
+            tile.classList.add('bg-amber-700', 'border-4', 'border-amber-800'); // Dry light brown
+          }
+
+          let innerContent = '';
+
+          if (plot.status === 'tilled') {
+            innerContent = `
+              <div class="text-[10px] ${isWet ? 'text-blue-300' : 'text-amber-200'} self-start">
+                ${isWet ? '💧 湿润' : '🍂 干燥'}
+              </div>
+              <div class="text-2xl my-auto opacity-40">🕳️</div>
+              <div class="text-[10px] text-amber-300 bg-black/30 px-1 rounded">空闲垄</div>
+            `;
+          } else if (plot.crop) {
+            const cropCfg = CROPS[plot.crop];
+            const growPct = Math.min(100, Math.floor((plot.progress / cropCfg.growTime) * 100));
+            
+            // Choose visual stage
+            let stageIcon = cropCfg.stages[0];
+            if (plot.ripe) {
+              stageIcon = cropCfg.stages[2];
+            } else if (growPct > 50) {
+              stageIcon = cropCfg.stages[1];
+            }
+
+            innerContent = `
+              <div class="w-full flex justify-between items-center text-[10px] leading-none">
+                <span class="${isWet ? 'text-cyan-300' : 'text-amber-200'} font-bold">
+                  ${isWet ? '💧 湿' : '⚠️ 缺水'}
+                </span>
+                <span class="text-amber-100 font-mono text-[9px]">${plot.ripe ? '已成熟!' : `${Math.floor(growPct)}%`}</span>
+              </div>
+
+              <!-- Main Crop Icon -->
+              <div class="text-3xl sm:text-4xl my-auto transition-transform ${plot.ripe ? 'crop-shake' : ''}">
+                ${stageIcon}
+              </div>
+
+              <!-- Progress bar or Ripe notification -->
+              ${plot.ripe 
+                ? `<div class="w-full bg-emerald-500 text-white text-[10px] text-center font-bold py-0.5 rounded shadow">可收获!</div>`
+                : `<div class="w-full bg-black/40 h-1.5 rounded-full overflow-hidden border border-amber-900/50">
+                    <div class="bg-amber-300 h-full transition-all duration-300" style="width: ${growPct}%"></div>
+                  </div>`
+              }
+            `;
+          }
+
+          tile.innerHTML = innerContent;
+        }
+
+        // Attach action click handler
+        tile.addEventListener('click', (e) => handlePlotClick(plot, tile, e));
+
+        container.appendChild(tile);
+      });
+    }
+
+    function renderShop() {
+      const container = document.getElementById('shop-items-container');
+      container.innerHTML = '';
+
+      Object.keys(CROPS).forEach((cropKey) => {
+        const crop = CROPS[cropKey];
+        const isLocked = State.level < crop.minLevel;
+        const canAfford = State.coins >= crop.seedCost;
+
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-xl border-2 flex flex-col justify-between transition-all ${
+          isLocked 
+            ? 'bg-amber-300/40 border-dashed border-amber-500/60 opacity-60' 
+            : 'bg-amber-100 border-amber-500 shadow-sm'
+        }`;
+
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-2xl">${crop.icon}</span>
+              <span class="text-xs font-bold text-amber-900 bg-amber-300/60 px-2 py-0.5 rounded">
+                ${isLocked ? `Lv.${crop.minLevel} 解锁` : `收益: 🪙${crop.sellPrice}`}
+              </span>
+            </div>
+            <div class="font-bold text-amber-950 text-sm">${crop.name}种子</div>
+            <div class="text-[11px] text-amber-800 line-clamp-2 mt-0.5">${crop.desc}</div>
+            <div class="text-[11px] text-amber-700 mt-1 flex items-center gap-2">
+              <span>⏱️ 成熟: ${crop.growTime}秒</span>
+            </div>
+          </div>
+
+          <div class="mt-3 flex items-center justify-between pt-2 border-t border-amber-300">
+            <span class="font-bold text-amber-950 text-xs">🪙 ${crop.seedCost} 金币</span>
+            <button 
+              ${isLocked || !canAfford ? 'disabled' : ''} 
+              class="btn-buy-seed bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1 rounded-lg pixel-btn disabled:opacity-40 disabled:cursor-not-allowed">
+              购买 1 袋
+            </button>
+          </div>
+        `;
+
+        const buyBtn = card.querySelector('.btn-buy-seed');
+        if (buyBtn) {
+          buyBtn.addEventListener('click', () => {
+            buySeed(cropKey, card);
+          });
+        }
+
+        container.appendChild(card);
+      });
+    }
+
+    function renderStorage() {
+      const container = document.getElementById('storage-items-container');
+      container.innerHTML = '';
+
+      let hasItems = false;
+      Object.keys(CROPS).forEach((cropKey) => {
+        const count = State.storage[cropKey] || 0;
+        if (count > 0) {
+          hasItems = true;
+          const crop = CROPS[cropKey];
+          const totalVal = count * crop.sellPrice;
+
+          const itemBox = document.createElement('div');
+          itemBox.className = 'bg-amber-100 border-2 border-amber-600 rounded-xl p-2.5 flex flex-col justify-between shadow-sm';
+          itemBox.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="text-3xl">${crop.icon}</span>
+              <div>
+                <div class="font-bold text-xs text-amber-950">${crop.name}</div>
+                <div class="text-[11px] text-amber-800">数量: <b class="text-amber-950">${count}</b></div>
+              </div>
+            </div>
+            <div class="mt-2 pt-1 border-t border-amber-300 flex items-center justify-between">
+              <span class="text-xs font-bold text-amber-900">🪙 ${totalVal}</span>
+              <button class="btn-sell-single bg-amber-600 hover:bg-amber-500 text-white text-[11px] px-2 py-0.5 rounded pixel-btn">
+                出售
+              </button>
+            </div>
+          `;
+
+          itemBox.querySelector('.btn-sell-single').addEventListener('click', (e) => {
+            sellCrop(cropKey, itemBox);
+          });
+
+          container.appendChild(itemBox);
+        }
+      });
+
+      if (!hasItems) {
+        container.innerHTML = `
+          <div class="col-span-full py-8 text-center text-amber-700/80 text-sm">
+            🌾 仓库目前空空如也，等农作物成熟后快来收获吧！
+          </div>
+        `;
+      }
+    }
+
+    function renderUpgrades() {
+      const container = document.getElementById('upgrade-items-container');
+      container.innerHTML = '';
+
+      UPGRADE_DATA.forEach((upg) => {
+        const currentLvl = State.upgrades[upg.id] || 0;
+        const isMax = currentLvl >= upg.maxLevel;
+        const price = Math.round(upg.basePrice * Math.pow(upg.priceMultiplier, currentLvl));
+        const canAfford = State.coins >= price && !isMax;
+
+        const row = document.createElement('div');
+        row.className = 'bg-amber-100 border-2 border-amber-500 p-2.5 rounded-xl flex items-center justify-between gap-2 shadow-sm';
+
+        row.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <span class="text-2xl">${upg.icon}</span>
+            <div>
+              <div class="font-bold text-xs sm:text-sm text-amber-950 flex items-center gap-2">
+                <span>${upg.name}</span>
+                <span class="text-[10px] bg-amber-300 px-1.5 py-0.2 rounded font-mono">
+                  ${isMax ? '已满级 MAX' : `Lv.${currentLvl}/${upg.maxLevel}`}
+                </span>
+              </div>
+              <div class="text-[11px] text-amber-800">${upg.desc}</div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            ${isMax 
+              ? `<span class="text-xs text-stone-500 font-bold px-2 py-1">已达成</span>`
+              : `<button class="btn-buy-upgrade bg-amber-700 hover:bg-amber-600 text-white font-bold text-xs px-3 py-1.5 rounded-lg pixel-btn disabled:opacity-40" ${!canAfford ? 'disabled' : ''}>
+                  🪙 ${price} 升级
+                </button>`
+            }
+          </div>
+        `;
+
+        const buyBtn = row.querySelector('.btn-buy-upgrade');
+        if (buyBtn) {
+          buyBtn.addEventListener('click', (e) => {
+            buyUpgrade(upg, price, row);
+          });
+        }
+
+        container.appendChild(row);
+      });
+    }
+
+    /* =========================================================
+       6. INTERACTION LOGIC & GAME ACTIONS
+       ========================================================= */
+    function setTool(toolName) {
+      State.currentTool = toolName;
+      document.querySelectorAll('.tool-btn').forEach(btn => {
+        if (btn.dataset.tool === toolName) {
+          btn.classList.add('bg-amber-700', 'text-amber-100', 'border-amber-400');
+          btn.classList.remove('bg-stone-800', 'text-amber-200', 'border-stone-600');
+        } else {
+          btn.classList.remove('bg-amber-700', 'text-amber-100', 'border-amber-400');
+          btn.classList.add('bg-stone-800', 'text-amber-200', 'border-stone-600');
+        }
+      });
+
+      const descMap = {
+        till: '开垦：点击荒地变成松软农田',
+        plant: `播种：种植选中的 [${CROPS[State.selectedSeed].name}] 种子`,
+        water: '浇水：为缺水的土地补充水分促进生长',
+        harvest: '收获：采集已经成熟的农作物'
+      };
+      document.getElementById('current-tool-desc').innerText = descMap[toolName] || '';
+      document.getElementById('current-seed-name').innerText = `播种${CROPS[State.selectedSeed].name}`;
+    }
+
+    function handlePlotClick(plot, elem, event) {
+      if (!plot.unlocked) return;
+
+      const tool = State.currentTool;
+
+      // Smart auto-handling or Tool-based action:
+      // If crop is ripe, tapping it should harvest regardless of tool for better playability!
+      if (plot.ripe) {
+        harvestPlot(plot, elem);
+        return;
+      }
+
+      // If wild, need tilling
+      if (plot.status === 'wild') {
+        if (tool === 'till') {
+          plot.status = 'tilled';
+          sound.sfxTill();
+          createFloatingText(elem, '⛏️ 开垦完成!', '#a3e635');
+          addXP(2);
+          renderFarmGrid();
+        } else {
+          sound.sfxError();
+          showToast('需要切换为 [开垦翻地] 工具来除草耕地！');
+        }
+        return;
+      }
+
+      // If tilled (empty plot)
+      if (plot.status === 'tilled') {
+        if (tool === 'plant') {
+          plantSeedOnPlot(plot, elem);
+        } else if (tool === 'water') {
+          // Can still water empty plot
+          plot.moisture = 100;
+          sound.sfxWater();
+          createFloatingText(elem, '💧 湿润!', '#38bdf8');
+          renderFarmGrid();
+        } else {
+          showToast('这是耕好的土地，请选择种子进行 [播种] ！');
+        }
+        return;
+      }
+
+      // If growing crop
+      if (plot.status === 'planted') {
+        if (tool === 'water') {
+          if (plot.moisture >= 90) {
+            showToast('土壤已经足够湿润啦！');
+          } else {
+            plot.moisture = 100;
+            sound.sfxWater();
+            createFloatingText(elem, '💧 充分浇水!', '#38bdf8');
+            renderFarmGrid();
+          }
+        } else if (tool === 'harvest') {
+          showToast('作物还在努力生长中，请耐心等待！');
+        } else if (tool === 'plant') {
+          showToast('这块地里已经有正在生长的植物了！');
+        } else if (tool === 'till') {
+          // Shovel up / clear ruined crop
+          plot.status = 'tilled';
+          plot.crop = null;
+          plot.progress = 0;
+          plot.ripe = false;
+          sound.sfxTill();
+          createFloatingText(elem, '铲除重耕', '#f87171');
+          renderFarmGrid();
+        }
+      }
+    }
+
+    function plantSeedOnPlot(plot, elem) {
+      const seedKey = State.selectedSeed;
+      if (!State.seeds[seedKey] || State.seeds[seedKey] <= 0) {
+        sound.sfxError();
+        showToast(`没有 [${CROPS[seedKey].name}] 种子了，请先在商店购买！`);
+        return;
+      }
+
+      State.seeds[seedKey]--;
+      plot.status = 'planted';
+      plot.crop = seedKey;
+      plot.progress = 0;
+      plot.ripe = false;
+      
+      sound.sfxPlant();
+      createFloatingText(elem, `🌱 种下${CROPS[seedKey].name}`, '#86efac');
+      addXP(3);
+
+      renderSeedBar();
+      renderFarmGrid();
+    }
+
+    function harvestPlot(plot, elem) {
+      if (!plot.ripe || !plot.crop) return;
+
+      const cropKey = plot.crop;
+      const crop = CROPS[cropKey];
+
+      // Add to storage
+      State.storage[cropKey] = (State.storage[cropKey] || 0) + 1;
+      sound.sfxHarvest();
+      createFloatingText(elem, `+1 ${crop.icon} ${crop.name}!`, '#facc15');
+
+      // Grant XP
+      addXP(Math.round(crop.sellPrice / 4) + 5);
+
+      // Reset plot to tilled (retains some moisture for smooth loop)
+      plot.status = 'tilled';
+      plot.crop = null;
+      plot.progress = 0;
+      plot.ripe = false;
+      plot.moisture = Math.max(0, plot.moisture - 20);
+
+      renderHeaderStats();
+      renderStorage();
+      renderFarmGrid();
+    }
+
+    function buySeed(cropKey, cardElem) {
+      const crop = CROPS[cropKey];
+      if (State.coins < crop.seedCost) {
+        sound.sfxError();
+        showToast('金币不足，多收获农作物卖钱吧！');
+        return;
+      }
+
+      State.coins -= crop.seedCost;
+      State.seeds[cropKey] = (State.seeds[cropKey] || 0) + 1;
+      sound.sfxCoin();
+      createFloatingText(cardElem, `-🪙${crop.seedCost}`, '#ef4444');
+      showToast(`已购买 1 袋 ${crop.name}种子！`);
+
+      renderHeaderStats();
+      renderSeedBar();
+      renderShop();
+    }
+
+    function sellCrop(cropKey, elem) {
+      const count = State.storage[cropKey] || 0;
+      if (count <= 0) return;
+
+      const crop = CROPS[cropKey];
+      const earned = crop.sellPrice;
+      State.storage[cropKey]--;
+      addCoins(earned);
+
+      sound.sfxCoin();
+      createFloatingText(elem, `+🪙${earned}`, '#fbbf24');
+      
+      renderHeaderStats();
+      renderStorage();
+    }
+
+    function sellAllCrops() {
+      let totalGained = 0;
+      let totalItems = 0;
+      for (const k in State.storage) {
+        const count = State.storage[k];
+        if (count > 0) {
+          totalGained += count * CROPS[k].sellPrice;
+          totalItems += count;
+          State.storage[k] = 0;
+        }
+      }
+
+      if (totalItems === 0) {
+        showToast('仓库没有任何可出售的农作物！');
+        return;
+      }
+
+      sound.sfxCoin();
+      addCoins(totalGained);
+      showToast(`🎉 成功售出全部收获物，入账 🪙${totalGained} 金币！`);
+      renderHeaderStats();
+      renderStorage();
+    }
+
+    function buyUpgrade(upg, cost, elem) {
+      if (State.coins < cost) {
+        sound.sfxError();
+        showToast('金币不足以支付升级！');
+        return;
+      }
+
+      State.coins -= cost;
+      State.upgrades[upg.id] = (State.upgrades[upg.id] || 0) + 1;
+      sound.sfxLevelUp();
+      createFloatingText(elem, '⭐ 升级成功!', '#38bdf8');
+
+      // Specific upgrade effects
+      if (upg.id === 'unlock_plot') {
+        let countToUnlock = 2;
+        for (let p of State.plots) {
+          if (!p.unlocked && countToUnlock > 0) {
+            p.unlocked = true;
+            countToUnlock--;
+          }
+        }
+      }
+
+      renderHeaderStats();
+      renderUpgrades();
+      renderFarmGrid();
+    }
+
+    /* =========================================================
+       7. SIMULATION LOOP (Growth, Weather, Helpers)
+       ========================================================= */
+    let lastTime = performance.now();
+
+    function gameLoop(now) {
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      // Update plots
+      let needFarmRerender = false;
+      const speedMult = getSpeedMultiplier();
+      const decayMult = getMoistureDecayRate();
+
+      State.plots.forEach((plot) => {
+        if (!plot.unlocked) return;
+
+        // Weather effect: rain gives free moisture
+        if (State.weather === 'rain') {
+          plot.moisture = Math.min(100, plot.moisture + 15 * dt);
+        } else {
+          // Moisture decays
+          if (plot.moisture > 0) {
+            plot.moisture = Math.max(0, plot.moisture - 2.5 * decayMult * dt);
+          }
+        }
+
+        // Auto helper scarecrow fairy logic: waters dry soil if available
+        if (State.upgrades.auto_helper > 0 && plot.status === 'planted' && plot.moisture <= 5) {
+          if (Math.random() < 0.05) {
+            plot.moisture = 100;
+            needFarmRerender = true;
+          }
+        }
+
+        // If planted, plant grows only if soil is moist
+        if (plot.status === 'planted' && !plot.ripe && plot.crop) {
+          const crop = CROPS[plot.crop];
+          if (plot.moisture > 0) {
+            plot.progress += dt * speedMult;
+            if (plot.progress >= crop.growTime) {
+              plot.progress = crop.growTime;
+              plot.ripe = true;
+              needFarmRerender = true;
+            }
+          }
+        }
+      });
+
+      // Update Day / Night cycle
+      State.timeOfDay = (State.timeOfDay + dt * 2.5) % 100;
+      updateAtmosphereVisuals();
+
+      // Small period re-render for progress bars
+      if (Math.floor(now / 500) !== Math.floor((now - dt * 1000) / 500) || needFarmRerender) {
+        renderFarmGrid();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function updateAtmosphereVisuals() {
+      const weatherOverlay = document.getElementById('weather-effect');
+      // Night is between 75 and 100
+      if (State.timeOfDay > 75) {
+        weatherOverlay.style.backgroundColor = 'rgba(15, 23, 42, 0.45)';
+      } else if (State.timeOfDay > 65) {
+        // Sunset
+        weatherOverlay.style.backgroundColor = 'rgba(234, 88, 12, 0.15)';
+      } else {
+        weatherOverlay.style.backgroundColor = 'transparent';
+      }
+
+      if (State.weather === 'rain') {
+        weatherOverlay.classList.add('rain-overlay');
+      } else {
+        weatherOverlay.classList.remove('rain-overlay');
+      }
+    }
+
+    // Weather change routine
+    setInterval(() => {
+      // 30% chance of rain, 70% sunny
+      const roll = Math.random();
+      if (roll < 0.3) {
+        if (State.weather !== 'rain') {
+          State.weather = 'rain';
+          showToast('🌧️ 天空下起了甘霖！农作物将自然得到灌溉。');
+        }
+      } else {
+        if (State.weather !== 'sunny') {
+          State.weather = 'sunny';
+          showToast('☀️ 雨过天晴，明媚阳光照耀着农田！');
+        }
+      }
+      renderHeaderStats();
+    }, 45000);
+
+    /* =========================================================
+       8. EVENT LISTENERS & INITIALIZATION
+       ========================================================= */
+    function setupEvents() {
+      // Tool selection clicks
+      document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          setTool(btn.dataset.tool);
+        });
+      });
+
+      // Tab Switching
+      const tabs = [
+        { btn: 'tab-btn-shop', panel: 'tab-shop' },
+        { btn: 'tab-btn-storage', panel: 'tab-storage' },
+        { btn: 'tab-btn-upgrade', panel: 'tab-upgrade' }
+      ];
+
+      tabs.forEach(({ btn, panel }) => {
+        document.getElementById(btn).addEventListener('click', () => {
+          tabs.forEach(t => {
+            document.getElementById(t.panel).classList.add('hidden');
+            const b = document.getElementById(t.btn);
+            b.classList.remove('bg-amber-600', 'text-amber-50');
+            b.classList.add('bg-amber-300/80', 'text-amber-900');
+          });
+
+          document.getElementById(panel).classList.remove('hidden');
+          const currentB = document.getElementById(btn);
+          currentB.classList.add('bg-amber-600', 'text-amber-50');
+          currentB.classList.remove('bg-amber-300/80', 'text-amber-900');
+
+          if (panel === 'tab-storage') renderStorage();
+          if (panel === 'tab-shop') renderShop();
+          if (panel === 'tab-upgrade') renderUpgrades();
+        });
+      });
+
+      // Sell all button
+      document.getElementById('btn-sell-all').addEventListener('click', sellAllCrops);
+
+      // Skip night / new day button
+      document.getElementById('btn-sleep').addEventListener('click', () => {
+        State.day++;
+        State.timeOfDay = 0;
+        sound.playTone(587.33, 'triangle', 0.25, 0.2);
+        showToast(`🌅 新的一天到来了！第 ${State.day} 天`);
+        renderHeaderStats();
+      });
+
+      // Audio mute button
+      document.getElementById('btn-sound').addEventListener('click', (e) => {
+        const muted = sound.toggleMute();
+        e.currentTarget.innerHTML = muted 
+          ? '<i class="ph ph-speaker-slash text-lg text-rose-300"></i>'
+          : '<i class="ph ph-speaker-high text-lg"></i>';
+        showToast(muted ? '🔇 音效已静音' : '🔊 音效已开启');
+      });
+
+      // Hint banner random cycle
+      const hints = [
+        '提示：湿润的土地才能让幼苗生长，记得常浇水！',
+        '提示：改良洒水壶能大幅延长土地蓄水时间。',
+        '提示：等级提升后可以解锁草莓、南瓜与神秘金蜜瓜！',
+        '提示：雨天所有农田会自动补充水分，无需手动灌溉。',
+        '提示：收获的高级作物留着批量出售可以赚取大量金币！'
+      ];
+      setInterval(() => {
+        const hintEl = document.getElementById('hint-text');
+        hintEl.innerText = hints[Math.floor(Math.random() * hints.length)];
+      }, 12000);
+    }
+
+    // Initialize application on load
+    window.onload = function() {
+      initPlots();
+      setupEvents();
+      renderHeaderStats();
+      renderSeedBar();
+      renderFarmGrid();
+      renderShop();
+      renderStorage();
+      renderUpgrades();
+      setTool('till');
+
+      // Start the main game animation & simulation loop
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
